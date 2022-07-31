@@ -10,7 +10,11 @@ defmodule Bumpr.Thread do
 
   def leaderboard(guild_id) do
     Repo.with_repo(path(guild_id), fn %{repo: repo} ->
-      repo.all(Leaderboard)
+      repo.all(from l in Leaderboard)
+      |> Enum.map(fn %{id: id} = entry ->
+        author = repo.get(Author, id)
+        %{entry | author: author}
+      end)
     end)
   end
 
@@ -43,13 +47,20 @@ defmodule Bumpr.Thread do
 
   def create_link(parent, message) do
     Repo.with_repo(path(message.guild_id), fn %{repo: repo} ->
-      repo.insert!(%Link{
-        config_id: 0,
-        author_id: message.author.id,
-        parent_id: (parent || %{id: nil}).id,
-        message_id: message.id,
-        content: message.content
-      })
+      try do
+
+        repo.insert(%Link{
+          config_id: 0,
+          author_id: message.author.id,
+          parent_id: (parent || %{id: nil}).id,
+          message_id: message.id,
+          content: message.content
+          })
+        catch
+          :error, %Exqlite.Error{} -> {:error, :invalid_bump}
+          _error, exception when is_exception(exception) ->
+            reraise(exception, __STACKTRACE__)
+      end
     end)
   end
 

@@ -3,6 +3,18 @@ defmodule Bumpr.Thread.Repo.Migrations.AddAuthorScoreView do
 
   def change do
     execute """
+    CREATE TRIGGER link_content_check
+    AFTER INSERT ON links
+    WHEN (NEW.content != 'bump')
+    BEGIN
+      SELECT RAISE(ROLLBACK, 'content must be "bump"');
+    END;
+    """,
+    """
+    DROP TRIGGER 'link_content_check';
+    """
+
+    execute """
     CREATE TRIGGER link_score
     AFTER INSERT ON links
     WHEN (NEW.content = 'bump')

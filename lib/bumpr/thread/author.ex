@@ -6,7 +6,7 @@ defmodule Bumpr.Thread.Author do
   @primary_key false
   schema "authors" do
     field :id, Snowflake, primary_key: true
-    has_many :link, Link, references: :id
+    has_many :links, Link, references: :id
     field :score, :integer, default: 0
     timestamps()
   end

@@ -7,10 +7,39 @@ defmodule Bumpr.Discord.Client do
     Consumer.start_link(__MODULE__)
   end
 
+  def format_leaderboard(guild_id) do
+    users = Bumpr.Thread.leaderboard(guild_id)
+    |> Enum.map(fn %{id: author_id} = entry ->
+      case get_user(author_id) do
+        {:ok, data} ->
+          %{entry | discord_user: data}
+        _ -> entry
+      end
+    end)
+
+    embed = Enum.reduce(users, %Nostrum.Struct.Embed{}, fn
+      %{discord_user: %{} = user, score: score}, embed ->
+        Nostrum.Struct.Embed.put_field(embed, "#{user.username}##{user.discriminator}", "#{score}")
+      %{score: score, id: id}, embed ->
+        Nostrum.Struct.Embed.put_field(embed, "unknown user #{id}", "#{score}")
+    end)
+    [first_user | _] = users
+    [first | rest] = embed.fields
+    %{embed | fields: [%{first | value: "#{first.value} 🏆"} | rest]}
+    |> Nostrum.Struct.Embed.put_title("Current bump thread leaderboard")
+    |> Nostrum.Struct.Embed.put_description("Leader: #{first.name}")
+    |> Nostrum.Struct.Embed.put_thumbnail(Nostrum.Struct.User.avatar_url(first_user.discord_user))
+  end
+
+  def handle_event({:MESSAGE_CREATE, %{content: "leaderboard"} = message, _ws_state}) do
+    embed = format_leaderboard(message.guild_id)
+    Nostrum.Api.create_message(message.channel_id, embed: embed)
+  end
+
   def handle_event({:MESSAGE_CREATE, message, _ws_state}) do
     case Bumpr.Discord.BumpThread.handle_message(message) do
       {:ok, parent} ->
-        if message.content == "bump", do: react(parent, message)
+        react(parent, message)
       _ -> :ok
     end
   end
@@ -70,6 +99,18 @@ defmodule Bumpr.Discord.Client do
 
       error ->
         Logger.error %{add_react: error}
+    end
+  end
+
+  def get_user(id) do
+    case Nostrum.Api.get_user(id) do
+      {:error, %{response: %{retry_after: retry}}} ->
+        Process.sleep(round(retry))
+        get_user(id)
+      {:ok, user} -> {:ok, user}
+
+      error ->
+        Logger.error %{get_user: error}
     end
   end
 end

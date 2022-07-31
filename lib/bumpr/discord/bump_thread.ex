@@ -1,6 +1,7 @@
 defmodule Bumpr.Discord.BumpThread do
   use GenServer
   alias Bumpr.Thread
+  require Logger
 
   def name(guild_id), do: :"#{__MODULE__}.#{guild_id}"
 
@@ -16,7 +17,7 @@ defmodule Bumpr.Discord.BumpThread do
   def init(guild) do
     config = Thread.config(guild.id)
     parent = Thread.parent(guild.id)
-    {:ok, %{config: config, parent: parent}}
+    {:ok, %{config: config, parent: parent, parent_id: nil}}
   end
 
   @impl GenServer
@@ -31,8 +32,13 @@ defmodule Bumpr.Discord.BumpThread do
       Thread.create_author(message)
     end
 
-    parent = Thread.create_link(state.parent, message)
-    {:reply, {:ok, state.parent}, %{state | parent: parent}}
+    case Thread.create_link(state.parent, message) do
+      {:ok, parent} ->
+        {:reply, {:ok, state.parent}, %{state | parent: parent}}
+      error ->
+        Logger.error(%{fail_link: error})
+      {:reply, error, state}
+    end
   end
 
   def handle_call(_, _from, state) do
